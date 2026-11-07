@@ -207,14 +207,22 @@ GaussianVoxelMap::GaussianVoxelMap(float resolution, int init_num_buckets, int m
 }
 
 void GaussianVoxelMap::create_voxelmap(const thrust::device_vector<Eigen::Vector3f>& points) {
+  if (points.empty()) {
+    voxelmap_info.num_voxels = 0;
+    voxelmap_info.num_buckets = 0;
+    voxelmap_info_ptr[0] = voxelmap_info;
+    buckets.clear();
+    num_points.clear();
+    voxel_means.clear();
+    voxel_covs.clear();
+    return;
+  }
+
   cudaStream_t stream;
   cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 
   create_bucket_table(stream, points);
 
-  num_points.resize(voxelmap_info.num_voxels);
-  voxel_means.resize(voxelmap_info.num_voxels);
-  voxel_covs.resize(voxelmap_info.num_voxels);
   num_points.resize(voxelmap_info.num_voxels);
   voxel_means.resize(voxelmap_info.num_voxels);
   voxel_covs.resize(voxelmap_info.num_voxels);
@@ -231,6 +239,17 @@ void GaussianVoxelMap::create_voxelmap(const thrust::device_vector<Eigen::Vector
 }
 
 void GaussianVoxelMap::create_voxelmap(const thrust::device_vector<Eigen::Vector3f>& points, const thrust::device_vector<Eigen::Matrix3f>& covariances) {
+  if (points.empty()) {
+    voxelmap_info.num_voxels = 0;
+    voxelmap_info.num_buckets = 0;
+    voxelmap_info_ptr[0] = voxelmap_info;
+    buckets.clear();
+    num_points.clear();
+    voxel_means.clear();
+    voxel_covs.clear();
+    return;
+  }
+
   cudaStream_t stream;
   cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 
@@ -256,13 +275,22 @@ void GaussianVoxelMap::create_voxelmap(const thrust::device_vector<Eigen::Vector
 }
 
 void GaussianVoxelMap::create_bucket_table(cudaStream_t stream, const thrust::device_vector<Eigen::Vector3f>& points) {
+  if (points.empty()) {
+    voxelmap_info.num_voxels = 0;
+    voxelmap_info.num_buckets = 0;
+    voxelmap_info_ptr[0] = voxelmap_info;
+    buckets.clear();
+    return;
+  }
+
   thrust::device_vector<Eigen::Vector3i> coords(points.size());
   thrust::transform(thrust::cuda::par.on(stream), points.begin(), points.end(), coords.begin(), voxel_coord_kernel(voxelmap_info_ptr.data()));
 
   thrust::device_vector<thrust::pair<int, int>> index_buckets;
   thrust::device_vector<int> voxels_failures(2, 0);
 
-  for (int num_buckets = init_num_buckets; init_num_buckets * 4; num_buckets *= 2) {
+  const int max_buckets = init_num_buckets * 32;
+  for (int num_buckets = init_num_buckets; num_buckets <= max_buckets; num_buckets *= 2) {
     voxelmap_info.num_buckets = num_buckets;
     voxelmap_info_ptr[0] = voxelmap_info;
 

@@ -125,6 +125,10 @@ bool LsqRegistration<PointTarget, PointSource>::step_lm(Eigen::Isometry3d& x0, E
   Eigen::Matrix<double, 6, 1> b;
   double y0 = linearize(x0, &H, &b);
 
+  if (!H.allFinite() || !b.allFinite() || H.diagonal().array().abs().maxCoeff() < 1e-6) {
+    return false;
+  }
+
   if (lm_lambda_ < 0.0) {
     lm_lambda_ = lm_init_lambda_factor_ * H.diagonal().array().abs().maxCoeff();
   }
@@ -134,11 +138,23 @@ bool LsqRegistration<PointTarget, PointSource>::step_lm(Eigen::Isometry3d& x0, E
     Eigen::LDLT<Eigen::Matrix<double, 6, 6>> solver(H + lm_lambda_ * Eigen::Matrix<double, 6, 6>::Identity());
     Eigen::Matrix<double, 6, 1> d = solver.solve(-b);
 
+    if (!d.allFinite() || d.norm() > 10.0) {
+      return false;
+    }
+
     delta = se3_exp(d);
 
     Eigen::Isometry3d xi = delta * x0;
+    if (!xi.matrix().allFinite()) {
+      return false;
+    }
+
     double yi = compute_error(xi);
     double rho = (y0 - yi) / (d.dot(lm_lambda_ * d - b));
+
+    if (!std::isfinite(rho)) {
+      return false;
+    }
 
     if (lm_debug_print_) {
       if (i == 0) {

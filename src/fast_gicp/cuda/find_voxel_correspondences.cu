@@ -86,6 +86,11 @@ void find_voxel_correspondences(
   const thrust::device_ptr<const Eigen::Isometry3f>& x_ptr,
   const thrust::device_vector<Eigen::Vector3i>& offsets,
   thrust::device_vector<thrust::pair<int, int>>& correspondences) {
+  if (src_points.empty() || voxelmap.buckets.empty() || voxelmap.voxelmap_info.num_buckets <= 0 || offsets.empty()) {
+    correspondences.clear();
+    return;
+  }
+
   std::vector<thrust::system::cuda::unique_eager_event> events(offsets.size());
 
   // find correspondences
